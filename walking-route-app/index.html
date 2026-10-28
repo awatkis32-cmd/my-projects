@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Andre's Walking Route App</title>
+</head>
+<body>
+   <h1>Andre's Walking Route Application</h1>
+   <p>How long do you want to walk?</p> 
+
+   <button onclick="chooseTime(5)">5 Minutes</button>
+   <button onclick="chooseTime(10)">10 Minutes</button>
+   <button onclick="chooseTime(15)">15 Minutes</button>
+   <button onclick="chooseTime(20)">20 Minutes</button>
+   <button onclick="chooseTime(25)">25 Minutes</button>
+   <button onclick="chooseTime(30)">30 Minutes</button>
+   <button onclick="chooseTime(35)">35 Minutes</button>
+   <button onclick="chooseTime(40)">40 Minutes</button>
+   <button onclick="chooseTime(45)">45 Minutes</button>
+   <button onclick="chooseTime(50)">50 Minutes</button>
+   <button onclick="chooseTime(55)">55 Minutes</button>
+   <button onclick="chooseTime(60)">60 Minutes</button>
+
+   <p id="result"></p>
+
+   <script>
+    // Lets set it at an easy walking pace: about 80 meters per minute
+    const METERS_PER_MINUTE = 80;
+
+    function chooseTime(Minutes) {
+        const meters =  Minutes * METERS_PER_MINUTE;
+        const km = (meters / 1000).toFixed(1);
+        document.getElementById("result").textContent = Minutes + " minutes is about " + km + " km.";
+    }
+   </script>
+</body>
+</html>
