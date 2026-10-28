@@ -24,6 +24,10 @@
 
    <p id="result"></p>
 
+   <button onclick="getLocation()">Use current my location</button>
+   <p id="location"></p>
+    <div id="map" style="height: 400px; width: 100%;"></div>
+   <script src="config.js"></script>
    <script>
     // Lets set it at an easy walking pace: about 80 meters per minute
     const METERS_PER_MINUTE = 80;
@@ -32,6 +36,56 @@
         const meters =  Minutes * METERS_PER_MINUTE;
         const km = (meters / 1000).toFixed(1);
         document.getElementById("result").textContent = Minutes + " minutes is about " + km + " km.";
+    }
+    function loadGoogleMaps() {
+        return new Promise(function (resolve, reject) {
+            if (window.google && google.maps) {
+                resolve();
+                return;
+            }
+            const script = document.createElement("script");
+            script.src = "https://maps.googleapis.com/maps/api/js?key=" + GOOGLE_MAPS_KEY + "&loading=async";
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+    async function showMap (lat, lng) {
+        await loadGoogleMaps();
+        const { Map } = await google.maps.importLibrary("maps");
+        const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+        const map = new Map(document.getElementById("map"), {
+            center: { lat: lat, lng: lng },
+            zoom: 16,
+            mapId: "DEMO_MAP_ID"
+        });
+        new AdvancedMarkerElement({
+            map: map,
+            position: { lat: lat, lng: lng },
+            title: "You are here"
+        });
+    }
+
+    function getLocation() {
+        if (!navigator.geolocation) {
+            document.getElementById("location").textContent = "Your browser can't share the location.";
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            function (position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                document.getElementById("location").textContent = "Location found. Loading map...";
+                showMap(lat, lng).then(function () {
+                    document.getElementById("location").textContent = "You are here.";
+                }).catch(function () {
+                    document.getElementById("location").textContent = "Got your location, but the map couldn't load. Check your key in config.js";
+                });
+            },
+            function () {
+                document.getElementById("location").textContent = "Couldn't get your location. Did you click Block? Or do you have a location blocker on?";
+            }
+        );
     }
    </script>
 </body>
