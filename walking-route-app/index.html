@@ -172,7 +172,6 @@
                 return;
             }
 
-            const route = data.routes[0];
             // Gather everything about this attempt
             const wantedSeconds = selectedMinutes * 60;
             const candidate = {
@@ -197,6 +196,9 @@
                 return makeRoute(attempt + 1, Math.min(3, Math.max(0.3, newFactor)), best);
             }
            
+            lastStops = best.stops; 
+            const route = best.route;
+
             const path = route.polyline.geoJsonLinestring.coordinates.map(function (c) {
                 return { lat: c[1], lng: c[0] };
             });
