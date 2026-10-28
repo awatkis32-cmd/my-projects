@@ -7,7 +7,7 @@
 </head>
 <body>
    <h1>Andre's Walking Route Application</h1>
-   <p>How long do you want to walk?</p> 
+   <p>How long do you want to walk?</p>
 
    <button onclick="chooseTime(5)">5 Minutes</button>
    <button onclick="chooseTime(10)">10 Minutes</button>
@@ -24,37 +24,53 @@
 
    <p id="result"></p>
 
-   <button onclick="getLocation()">Use current my location</button>
+   <button onclick="getLocation()">Use my current location</button>
    <p id="location"></p>
-    <div id="map" style="height: 400px; width: 100%;"></div>
+
+   <button onclick="makeRoute()">Make my route</button>
+   <p id="routeStatus"></p>
+   <button onclick="openInMaps()">Open in Google Maps</button>
+
+   <div id="map" style="height: 400px; width: 100%;"></div>
+
    <script src="config.js"></script>
    <script>
-    // Lets set it at an easy walking pace: about 80 meters per minute
+    // Easy walking pace: about 80 meters per minute
     const METERS_PER_MINUTE = 80;
 
-    function chooseTime(Minutes) {
-        const meters =  Minutes * METERS_PER_MINUTE;
+    // These remember things between button clicks
+    let selectedMinutes = null;
+    let startPoint = null;
+    let map = null;
+    let routeLine = null;
+    let lastStops = null;
+
+    function chooseTime(minutes) {
+        selectedMinutes = minutes;
+        const meters = minutes * METERS_PER_MINUTE;
         const km = (meters / 1000).toFixed(1);
-        document.getElementById("result").textContent = Minutes + " minutes is about " + km + " km.";
+        document.getElementById("result").textContent = minutes + " minutes is about " + km + " km.";
     }
+
     function loadGoogleMaps() {
-    return new Promise(function (resolve, reject) {
-        if (window.google && google.maps && google.maps.importLibrary) {
-            resolve();
-            return;
-        }
-        window.onGoogleMapsReady = resolve;
-        const script = document.createElement("script");
-        script.src = "https://maps.googleapis.com/maps/api/js?key=" + GOOGLE_MAPS_KEY + "&loading=async&libraries=maps,marker&callback=onGoogleMapsReady";
-        script.onerror = reject;
-        document.head.appendChild(script);
-    });
-}
-    async function showMap (lat, lng) {
+        return new Promise(function (resolve, reject) {
+            if (window.google && google.maps && google.maps.importLibrary) {
+                resolve();
+                return;
+            }
+            window.onGoogleMapsReady = resolve;
+            const script = document.createElement("script");
+            script.src = "https://maps.googleapis.com/maps/api/js?key=" + GOOGLE_MAPS_KEY + "&loading=async&libraries=maps,marker&callback=onGoogleMapsReady";
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    async function showMap(lat, lng) {
         await loadGoogleMaps();
         const { Map } = await google.maps.importLibrary("maps");
         const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
-        const map = new Map(document.getElementById("map"), {
+        map = new Map(document.getElementById("map"), {
             center: { lat: lat, lng: lng },
             zoom: 16,
             mapId: "DEMO_MAP_ID"
@@ -75,6 +91,7 @@
             function (position) {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
+                startPoint = { lat: lat, lng: lng };
                 document.getElementById("location").textContent = "Location found. Loading map...";
                 showMap(lat, lng).then(function () {
                     document.getElementById("location").textContent = "You are here.";
@@ -88,6 +105,158 @@
             }
         );
     }
+
+    // Finds a point a certain distance away from the start, in a certain direction
+    function pointAt(start, bearingDegrees, distanceMeters) {
+        const R = 6371000; // size of the Earth in meters
+        const b = bearingDegrees * Math.PI / 180;
+        const lat1 = start.lat * Math.PI / 180;
+        const lng1 = start.lng * Math.PI / 180;
+        const d = distanceMeters / R;
+        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(b));
+        const lng2 = lng1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+        return { latitude: lat2 * 180 / Math.PI, longitude: lng2 * 180 / Math.PI };
+    }
+
+    async function makeRoute(attempt = 1, factor = 1, best = null) {
+        const status = document.getElementById("routeStatus");
+        if (!selectedMinutes) {
+            status.textContent = "Pick a time first.";
+            return;
+        }
+        if (!startPoint || !map) {
+            status.textContent = "Click 'Use my current location' first.";
+            return;
+        }
+        status.textContent = "Planning your route...";
+
+        // Roads are not straight, so we aim a bit shorter than the target
+        const targetMeters = selectedMinutes * METERS_PER_MINUTE;
+        const sideLength = targetMeters / 3 / 1.3 * factor;
+        const bearing = Math.random() * 360;
+        const point1 = pointAt(startPoint, bearing, sideLength);
+        const point2 = pointAt(startPoint, bearing + 60, sideLength);
+        const home = { latitude: startPoint.lat, longitude: startPoint.lng };
+        // A finish point 20 meters from the start, so a loop that ends exactly where it began doesn't confuse Google
+        const endPoint = pointAt(startPoint, bearing + 30, 20);
+
+        const body = {
+            origin: { location: { latLng: home } },
+            destination: { location: { latLng: endPoint } },
+            intermediates: [
+                { location: { latLng: point1 } },
+                { location: { latLng: point2 } }
+            ],
+            travelMode: "WALK",
+            polylineEncoding: "GEO_JSON_LINESTRING"
+        };
+
+        try {
+            const response = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Goog-Api-Key": GOOGLE_MAPS_KEY,
+                    "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.geoJsonLinestring"
+                },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                status.textContent = "Google said: " + (data.error && data.error.message ? data.error.message : response.status);
+                return;
+            }
+            if (!data.routes || data.routes.length === 0) {
+                status.textContent = "No route found. Try again.";
+                return;
+            }
+
+            const route = data.routes[0];
+            // Gather everything about this attempt
+            const wantedSeconds = selectedMinutes * 60;
+            const candidate = {
+                route: data.routes[0],
+                seconds: parseInt(data.routes[0].duration),
+                stops: { start: home, point1: point1, point2: point2, end: endPoint }
+            };
+
+            // Keep whichever attempt so far is closest to the time you picked
+            if (!best || Math.abs(candidate.seconds - wantedSeconds) < Math.abs(best.seconds - wantedSeconds)) {
+                best = candidate;
+            }
+
+            // How far off is acceptable: 2 to 5 minutes, depending on the walk length
+            const allowedSeconds = Math.min(5, Math.max(2, selectedMinutes * 0.2)) * 60;
+            const closeEnough = Math.abs(best.seconds - wantedSeconds) <= allowedSeconds;
+
+            // Not close enough? Resize the triangle and try again (up to 5 tries)
+            if (!closeEnough && attempt < 5) {
+                const newFactor = factor * wantedSeconds / candidate.seconds;
+                status.textContent = "Adjusting the route size (try " + (attempt + 1) + ")...";
+                return makeRoute(attempt + 1, Math.min(3, Math.max(0.3, newFactor)), best);
+            }
+           
+            const path = route.polyline.geoJsonLinestring.coordinates.map(function (c) {
+                return { lat: c[1], lng: c[0] };
+            });
+
+            if (routeLine) {
+                routeLine.setMap(null);
+            }
+            routeLine = new google.maps.Polyline({
+                path: path,
+                strokeColor: "#1a73e8",
+                strokeWeight: 5,
+                map: map
+            });
+
+            const bounds = new google.maps.LatLngBounds();
+            path.forEach(function (p) { bounds.extend(p); });
+            map.fitBounds(bounds);
+
+            const km = (route.distanceMeters / 1000).toFixed(1);
+            const minutes = Math.round(best.seconds / 60);
+            const difference  = minutes - selectedMinutes;
+            let timingNote = " Walking times can be off by a few minutes.";
+            if (Math.abs(best.seconds - wantedSeconds) > allowedSeconds) {
+                timingNote = " This one is about " + Math.abs(difference) + " minutes " + (difference > 0 ? "longer" : "shorter") + " than you picked. Click 'Make my route' to try another.";
+            }
+            status.textContent = "Route ready: about " + km + " km, roughly " + minutes + " minutes (you picked " + selectedMinutes + ")." + timingNote + " Please check it looks safe before you go.";
+        } catch (error) {
+            console.error("Route problem:", error);
+            status.textContent = "Couldn't get a route. Details: " + (error && error.message ? error.message : "unknown problem");
+        }
+    }
+    function buildMapsLink() {
+        if (!lastStops) {
+            return null;
+        }
+        const s = lastStops;
+
+        // Turns a point into text like "35.1234, 139.5678"
+        const toText = function (p) {
+            return p.latitude + "," + p.longitude;
+        };
+
+        const params = new URLSearchParams({
+            api: "1",
+            origin: toText(s.start),
+            destination: toText(s.end),
+            waypoints: toText(s.point1) + "|" + toText(s.point2),
+            travelMode: "walking",
+        });
+
+        return "https://www.google.com/maps/dir/?" + params.toString();
+    }
+    function openInMaps() {
+    const link = buildMapsLink();
+    if (!link) {
+        document.getElementById("routeStatus").textContent = "Make a route first, then open it in Google Maps.";
+        return;
+    }
+    window.open(link, "_blank");
+}
    </script>
 </body>
 </html>
