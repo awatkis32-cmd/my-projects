@@ -38,18 +38,18 @@
         document.getElementById("result").textContent = Minutes + " minutes is about " + km + " km.";
     }
     function loadGoogleMaps() {
-        return new Promise(function (resolve, reject) {
-            if (window.google && google.maps) {
-                resolve();
-                return;
-            }
-            const script = document.createElement("script");
-            script.src = "https://maps.googleapis.com/maps/api/js?key=" + GOOGLE_MAPS_KEY + "&loading=async";
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
-    }
+    return new Promise(function (resolve, reject) {
+        if (window.google && google.maps && google.maps.importLibrary) {
+            resolve();
+            return;
+        }
+        window.onGoogleMapsReady = resolve;
+        const script = document.createElement("script");
+        script.src = "https://maps.googleapis.com/maps/api/js?key=" + GOOGLE_MAPS_KEY + "&loading=async&libraries=maps,marker&callback=onGoogleMapsReady";
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
     async function showMap (lat, lng) {
         await loadGoogleMaps();
         const { Map } = await google.maps.importLibrary("maps");
@@ -78,8 +78,9 @@
                 document.getElementById("location").textContent = "Location found. Loading map...";
                 showMap(lat, lng).then(function () {
                     document.getElementById("location").textContent = "You are here.";
-                }).catch(function () {
-                    document.getElementById("location").textContent = "Got your location, but the map couldn't load. Check your key in config.js";
+                }).catch(function (error) {
+                    console.error("Map problem:", error);
+                    document.getElementById("location").textContent = "Got your location, but the map couldn't load. Details: " + (error && error.message ? error.message : "the Google script did not finish loading");
                 });
             },
             function () {
