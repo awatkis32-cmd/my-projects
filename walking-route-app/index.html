@@ -32,8 +32,10 @@
 
    <div id="map" style="height: 400px; width: 100%;"></div>
    <button onclick="openInMaps()" style="margin-top: 10px;">Open in Google Maps</button>
-
+   <button onclick="saveRoute()" style="margin-top: 10px;">Save this route</button>
+   
    <script src="config.js"></script>
+   
    <script>
     // Easy walking pace: about 80 meters per minute
     const METERS_PER_MINUTE = 80;
@@ -44,6 +46,7 @@
     let map = null;
     let routeLine = null;
     let lastStops = null;
+    let lastRouteInfo = null;
 
     function chooseTime(minutes) {
         selectedMinutes = minutes;
@@ -197,6 +200,11 @@
             }
            
             lastStops = best.stops; 
+            lastRouteInfo = {
+                id: Date.now(),
+                minutes: selectedMinutes,
+                actualMinutes: Math.round(best.seconds / 60)
+            };
             const route = best.route;
 
             const path = route.polyline.geoJsonLinestring.coordinates.map(function (c) {
@@ -258,7 +266,60 @@
         return;
     }
     window.open(link, "_blank");
+    }
+
+function loadFavourites() {
+    try {
+        const saved = localStorage.getItem("favouriteRoutes");
+        return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+        console.error("Couldn't read favourites:", error);
+        return [];
+    }
 }
+
+function storeFavourites(list) {
+    try{
+        localStorage.setItem("favouriteRoutes", JSON.stringify(list));
+        return true;
+    } catch (error) {
+        console.error("Couldn't save favourites:", error);
+        return false;
+    }
+}
+
+function saveRoute() {
+    const status = document.getElementById("routeStatus");
+    if (!lastStops || !lastRouteInfo) {
+        status.textContent = "Make a route first, then save it.";
+        return;
+    }
+
+    const favourites = loadFavourites();
+
+    const alreadySaved = favourites.some(function (f) {
+        return f.id === lastRouteInfo.id;
+    });
+    if (alreadySaved) {
+        status.textContent = "This route is already saved.";
+        return;
+    }
+
+    favourites.push({
+        id: lastRouteInfo.id,
+        savedOn: new Date().toLocaleDateString(),
+        minutes: lastRouteInfo.minutes,
+        actualMinutes: lastRouteInfo.actualMinutes,
+        stops: lastStops
+    });
+
+    if (storeFavourites(favourites)) {
+        status.textContent = "Route saved! You now have " + favourites.length + " saved route(s).";
+    } else {
+        status.textContent = "Couldn't save the route in this browser.";
+    }
+}
+
    </script>
 </body>
 </html>
