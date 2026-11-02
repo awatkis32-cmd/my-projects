@@ -34,6 +34,9 @@
    <button onclick="openInMaps()" style="margin-top: 10px;">Open in Google Maps</button>
    <button onclick="saveRoute()" style="margin-top: 10px;">Save this route</button>
    
+   <h2>My Favourite Routes</h2>
+   <div id="favourites"></div>
+
    <script src="config.js"></script>
    
    <script>
@@ -238,11 +241,11 @@
             status.textContent = "Couldn't get a route. Details: " + (error && error.message ? error.message : "unknown problem");
         }
     }
-    function buildMapsLink() {
-        if (!lastStops) {
+    function buildMapsLink(stops = lastStops) {
+        if (!stops) {
             return null;
         }
-        const s = lastStops;
+        const s = stops;
 
         // Turns a point into text like "35.1234, 139.5678"
         const toText = function (p) {
@@ -315,11 +318,67 @@ function saveRoute() {
 
     if (storeFavourites(favourites)) {
         status.textContent = "Route saved! You now have " + favourites.length + " saved route(s).";
+        showFavourites();
     } else {
         status.textContent = "Couldn't save the route in this browser.";
     }
 }
 
+function showFavourites () {
+    const box = document.getElementById("favourites");
+    const favourites = loadFavourites();
+    box.textContent = "";
+
+    if (favourites.length === 0) {
+        box.textContent = "No saved routes yet.";
+        return;
+    }
+
+    favourites.forEach(function (f) {
+        const row = document.createElement("div");
+        row.style.marginBottom = "10px";
+
+        const label = document.createElement("span");
+        label.textContent = f.minutes + "-minute walk (about " + f.actualMinutes + " min), saved " + f.savedOn + "";
+        
+        const openButton = document.createElement("button");
+        openButton.textContent = "Open in Google Maps";
+        openButton.onclick = function () { openSavedRoute(f.id); };
+
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "Delete";
+        deleteButton.onclick = function () { deleteSavedRoute(f.id); };
+
+        row.appendChild(label);
+        row.appendChild(openButton);
+        row.appendChild(deleteButton);
+        box.appendChild(row);
+    });
+}  
+
+    function openSavedRoute(id) {
+    const favourites = loadFavourites();
+    const found = favourites.find(function (f) {
+        return f.id === id;
+    });
+    if (!found) {
+        return;
+    }
+    window.open(buildMapsLink(found.stops), "_blank");
+}
+
+function deleteSavedRoute(id) {
+    if (!confirm("Delete this saved route?")) {
+        return;
+    }
+    const remaining = loadFavourites().filter(function (f) {
+        return f.id !== id;
+    });
+    storeFavourites(remaining);
+    showFavourites();
+}
+
+showFavourites();
    </script>
 </body>
 </html>
