@@ -313,7 +313,8 @@ function saveRoute() {
         savedOn: new Date().toLocaleDateString(),
         minutes: lastRouteInfo.minutes,
         actualMinutes: lastRouteInfo.actualMinutes,
-        stops: lastStops
+        stops: lastStops,
+        note: ""
     });
 
     if (storeFavourites(favourites)) {
@@ -348,10 +349,31 @@ function showFavourites () {
         const deleteButton = document.createElement("button");
         deleteButton.textContent = "Delete";
         deleteButton.onclick = function () { deleteSavedRoute(f.id); };
+        const noteBox = document.createElement("input");
+        noteBox.type = "text";
+        noteBox.placeholder = "Add a note (e.g. quiet park)";
+        noteBox.value = f.note || "";
+        noteBox.maxLength = 100;
+        noteBox.style.width = "220px";
+        noteBox.style.marginRight = "6px";
+
+        const noteButton = document.createElement("button");
+        noteButton.textContent = "Save note";
+        noteButton.onclick = function () {
+    if (saveNote(f.id, noteBox.value)) {
+        noteButton.textContent = "Saved!";
+        setTimeout(function () { noteButton.textContent = "Save note"; }, 1500);
+    }
+};
 
         row.appendChild(label);
         row.appendChild(openButton);
         row.appendChild(deleteButton);
+        const noteRow = document.createElement("div");
+        noteRow.style.marginTop = "4px";
+        noteRow.appendChild(noteBox);
+        noteRow.appendChild(noteButton);
+        row.appendChild(noteRow);
         box.appendChild(row);
     });
 }  
@@ -376,6 +398,18 @@ function deleteSavedRoute(id) {
     });
     storeFavourites(remaining);
     showFavourites();
+}
+
+function saveNote(id, text) {
+    const favourites = loadFavourites();
+    const found = favourites.find(function (f) {
+        return f.id === id;
+    });
+    if (!found) {
+        return false;
+    }
+    found.note = text.trim();
+    return storeFavourites(favourites);
 }
 
 showFavourites();
